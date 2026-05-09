@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>卦象实验室</title>
-    <!-- 核心库 -->
+    <!-- 引入核心库 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
@@ -12,7 +12,7 @@
         
         body { 
             font-family: 'Inter', -apple-system, sans-serif; 
-            background-color: #F2F2F2; 
+            background-color: #F5F5F5; 
             margin: 0; 
             display: flex; 
             justify-content: center; 
@@ -22,7 +22,6 @@
             user-select: none;
         }
 
-        /* 扫描动画 */
         @keyframes scan {
             0% { top: 0%; opacity: 0; }
             50% { opacity: 1; }
@@ -37,15 +36,9 @@
             z-index: 10;
         }
 
-        #report-card {
-            background: white;
-            transition: transform 0.3s ease;
-        }
-        
-        /* 针对移动端优化点击效果 */
         .btn-active:active {
             transform: scale(0.96);
-            opacity: 0.9;
+            opacity: 0.8;
         }
     </style>
 </head>
@@ -70,10 +63,9 @@
             const fileInputRef = useRef(null);
             const reportRef = useRef(null);
 
-            // 当进入结果页且数据加载完后生成图片
             useEffect(() => {
                 if (step === 'result' && data) {
-                    const timer = setTimeout(() => generateSaveableImage(), 1200);
+                    const timer = setTimeout(() => generateSaveableImage(), 1000);
                     return () => clearTimeout(timer);
                 }
             }, [step, data]);
@@ -90,8 +82,40 @@
                     });
                     setSaveImage(canvas.toDataURL('image/png'));
                 } catch (err) {
-                    console.error("Image generation failed", err);
+                    console.error("Save image error", err);
                 }
+            };
+
+            const resizeAndCompress = (file) => {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = (e) => {
+                        const img = new Image();
+                        img.src = e.target.result;
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            const MAX_WIDTH = 512; // 手机端极致压缩，确保请求必过
+                            let width = img.width;
+                            let height = img.height;
+
+                            if (width > height) {
+                                if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+                            } else {
+                                if (height > MAX_WIDTH) { width *= MAX_WIDTH / height; height = MAX_WIDTH; }
+                            }
+
+                            canvas.width = width;
+                            canvas.height = height;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, width, height);
+                            // 使用较小的质量参数
+                            resolve(canvas.toDataURL('image/jpeg', 0.6).split(',')[1]);
+                        };
+                        img.onerror = () => reject("图片加载失败");
+                    };
+                    reader.onerror = () => reject("读取文件失败");
+                });
             };
 
             const analyzePalm = async (base64) => {
@@ -99,8 +123,8 @@
                 setError(null);
                 setSaveImage(null);
                 
-                const prompt = `你是一位精通易经与生物识别的大师。请分析手掌照片。
-                必须返回严格JSON：{"hexagram": "卦名", "insight": "解析", "color": "#HEX", "vibe": "气质", "outfit": "建议"}`;
+                const prompt = `你是一位精通周易与美学的实验室AI。请通过此手掌图像，分析其卦象、气质和建议。
+                返回严格JSON：{"hexagram":"卦名","insight":"解析","color":"#HEX颜色","vibe":"气质短语","outfit":"建议"}`;
 
                 try {
                     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL_ID}:generateContent?key=${apiKey}`, {
@@ -112,13 +136,20 @@
                         })
                     });
 
-                    if (!response.ok) throw new Error("连接能量场失败");
+                    if (!response.ok) {
+                        const errInfo = await response.json().catch(() => ({}));
+                        throw new Error(`API Error: ${response.status} - ${errInfo.error?.message || '未知错误'}`);
+                    }
+                    
                     const resData = await response.json();
-                    const text = resData.candidates[0].content.parts[0].text;
-                    setData(JSON.parse(text));
+                    const rawText = resData.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (!rawText) throw new Error("API 未返回解析内容");
+                    
+                    setData(JSON.parse(rawText));
                     setStep('result');
                 } catch (err) {
-                    setError("解析中断，请重试");
+                    console.error(err);
+                    setError(err.message.includes("429") ? "请求太频繁，请稍后再试" : "解析中断，请重试或更换图片");
                     setStep('home');
                 }
             };
@@ -126,66 +157,62 @@
             const handleFile = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = (ev) => {
-                    const img = new Image();
-                    img.src = ev.target.result;
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = 800; canvas.height = (img.height/img.width)*800;
-                        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-                        analyzePalm(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
-                    };
-                };
+                try {
+                    const base64 = await resizeAndCompress(file);
+                    analyzePalm(base64);
+                } catch (err) {
+                    setError("图片处理失败，请重试");
+                }
             };
 
             return (
                 <div className="w-full flex flex-col items-center">
-                    <div className="w-full bg-white rounded-[2.5rem] shadow-[0_30px_60px_rgba(0,0,0,0.1)] overflow-hidden flex flex-col min-h-[680px]">
+                    <div className="w-full bg-white rounded-[3rem] shadow-[0_40px_80px_-20px_rgba(0,0,0,0.15)] overflow-hidden flex flex-col min-h-[720px]">
                         
-                        {/* 报告内容区域（可被截图） */}
-                        <div ref={reportRef} id="report-card" className="flex-1 flex flex-col relative bg-white">
-                            <header className="px-8 pt-12 pb-6">
-                                <p className="text-[10px] font-black tracking-[0.4em] text-gray-300 uppercase mb-1">Ethereal Science</p>
-                                <h1 className="text-2xl font-black tracking-tight text-black">卦象实验室</h1>
+                        {/* 结果区域 */}
+                        <div ref={reportRef} className="flex-1 flex flex-col relative bg-white">
+                            <header className="px-10 pt-14 pb-8">
+                                <p className="text-[10px] font-black tracking-[0.5em] text-gray-300 uppercase mb-2">Aesthetic Lab</p>
+                                <h1 className="text-3xl font-black tracking-tighter text-black">卦象实验室</h1>
                             </header>
 
-                            <main className="flex-1 px-8 flex flex-col">
+                            <main className="flex-1 px-10 flex flex-col">
                                 {step === 'home' && (
                                     <div className="flex-1 flex flex-col items-center justify-center py-10">
                                         <div 
                                             onClick={() => fileInputRef.current.click()}
                                             className="w-full aspect-[4/5] border-2 border-dashed border-gray-100 rounded-[3rem] flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-all btn-active"
                                         >
-                                            <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
-                                                <span className="text-2xl text-gray-300">＋</span>
+                                            <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-6">
+                                                <span className="text-3xl text-gray-300">＋</span>
                                             </div>
-                                            <p className="text-[10px] font-bold tracking-widest text-gray-400 uppercase text-center">
-                                                上传手掌照片<br/><span className="text-[8px] opacity-60">开启易经生物特征解析</span>
+                                            <p className="text-[11px] font-bold tracking-widest text-gray-400 uppercase text-center leading-relaxed">
+                                                上传手掌照片<br/>开启深度命理分析
                                             </p>
                                         </div>
                                         <input type="file" ref={fileInputRef} className="hidden" onChange={handleFile} accept="image/*" />
-                                        {error && <p className="mt-6 text-[10px] text-red-400 font-bold">{error}</p>}
+                                        {error && <div className="mt-8 p-4 bg-red-50 rounded-2xl w-full text-center">
+                                            <p className="text-[10px] text-red-400 font-bold leading-relaxed">{error}</p>
+                                        </div>}
                                     </div>
                                 )}
 
                                 {step === 'loading' && (
                                     <div className="flex-1 flex flex-col items-center justify-center">
-                                        <div className="w-full aspect-square bg-gray-50 rounded-[3rem] relative overflow-hidden flex items-center justify-center">
+                                        <div className="w-full aspect-square bg-gray-50 rounded-[4rem] relative overflow-hidden flex items-center justify-center">
                                             <div className="scan-line"></div>
-                                            <p className="text-[10px] font-black tracking-[0.2em] text-gray-400 animate-pulse uppercase text-center">
-                                                正在同步周易场<br/>计算生物特征...
+                                            <p className="text-[11px] font-black tracking-[0.3em] text-gray-400 animate-pulse uppercase text-center leading-loose">
+                                                数据同步中<br/>解析掌部脉络...
                                             </p>
                                         </div>
                                     </div>
                                 )}
 
                                 {step === 'result' && data && (
-                                    <div className="flex-1 flex flex-col space-y-8 animate-in fade-in duration-1000">
+                                    <div className="flex-1 flex flex-col space-y-10 animate-in fade-in duration-700">
                                         <section>
-                                            <h2 className="text-7xl font-black tracking-tighter text-black">{data.hexagram}</h2>
-                                            <div className="w-10 h-1.5 bg-black mt-4"></div>
+                                            <h2 className="text-8xl font-black tracking-tighter text-black leading-none">{data.hexagram}</h2>
+                                            <div className="w-16 h-2 bg-black mt-6"></div>
                                         </section>
 
                                         <section>
@@ -194,49 +221,44 @@
                                             </p>
                                         </section>
 
-                                        <section className="bg-gray-50 rounded-[2rem] p-6 space-y-6">
+                                        <section className="bg-gray-50 rounded-[2.5rem] p-8 space-y-8">
                                             <div className="flex justify-between items-center">
-                                                <div className="w-12 h-12 rounded-full border-4 border-white shadow-sm" style={{backgroundColor: data.color}}></div>
-                                                <span className="text-[10px] font-mono text-gray-400 font-bold">{data.color}</span>
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-12 h-12 rounded-full border-4 border-white shadow-sm" style={{backgroundColor: data.color}}></div>
+                                                    <span className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">能量主色</span>
+                                                </div>
+                                                <span className="text-[11px] font-mono text-gray-400 font-bold">{data.color}</span>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-4 border-t border-gray-100 pt-4">
+                                            <div className="grid grid-cols-2 gap-6 border-t border-gray-100 pt-6">
                                                 <div>
-                                                    <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest mb-1">气质关键词</p>
-                                                    <p className="text-xs font-black">{data.vibe}</p>
+                                                    <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest mb-2">核心气质</p>
+                                                    <p className="text-[13px] font-black">{data.vibe}</p>
                                                 </div>
                                                 <div>
-                                                    <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest mb-1">穿搭建议</p>
-                                                    <p className="text-xs font-black">{data.outfit}</p>
+                                                    <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest mb-2">穿搭开运</p>
+                                                    <p className="text-[13px] font-black">{data.outfit}</p>
                                                 </div>
                                             </div>
                                         </section>
                                         <div className="py-4 text-center">
-                                            <p className="text-[8px] font-black text-gray-200 tracking-[0.4em] uppercase">- 长按此区域保存报告 -</p>
+                                            <p className="text-[9px] font-black text-gray-200 tracking-[0.4em] uppercase">- 长按此区域保存分析报告 -</p>
                                         </div>
                                     </div>
                                 )}
                             </main>
 
-                            {/* 透明图片覆盖层：只覆盖 report-card 内部，不干扰 footer */}
+                            {/* 结果页透明覆盖层（仅限长按保存使用） */}
                             {step === 'result' && saveImage && (
-                                <img 
-                                    src={saveImage} 
-                                    className="absolute inset-0 w-full h-full opacity-0 z-10 cursor-pointer"
-                                    style={{ WebkitTouchCallout: 'default' }}
-                                />
+                                <img src={saveImage} className="absolute inset-0 w-full h-full opacity-0 z-10 cursor-pointer" style={{ WebkitTouchCallout: 'default' }} />
                             )}
                         </div>
 
-                        {/* 操作区域：独立于截图区域之外，确保按钮可点击 */}
-                        <footer className="px-8 pb-8 pt-2 bg-white z-20">
+                        {/* 操作区：永远置顶，不被遮挡 */}
+                        <footer className="px-10 pb-12 pt-2 bg-white z-20">
                             {step === 'result' && (
                                 <button 
-                                    onClick={() => {
-                                        setStep('home');
-                                        setData(null);
-                                        setSaveImage(null);
-                                    }}
-                                    className="w-full py-5 bg-black text-white rounded-2xl text-[11px] font-black tracking-[0.2em] uppercase btn-active shadow-lg shadow-black/10"
+                                    onClick={() => { setStep('home'); setData(null); setSaveImage(null); }}
+                                    className="w-full py-6 bg-black text-white rounded-3xl text-[12px] font-black tracking-[0.3em] uppercase btn-active shadow-2xl shadow-black/20"
                                 >
                                     重新解析
                                 </button>
