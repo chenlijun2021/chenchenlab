@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>卦象实验室</title>
-    <!-- 引入核心库 -->
+    <!-- 优先引入库文件 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
@@ -18,9 +18,11 @@
             justify-content: center; 
             align-items: center; 
             min-height: 100vh;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
         }
 
-        /* 隐藏滚动条 */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
@@ -36,30 +38,67 @@
             background: linear-gradient(to right, transparent, #000, transparent);
             animation: scan 2s linear infinite;
         }
+
+        #capture-area {
+            background: white;
+        }
     </style>
 </head>
 <body>
     <div id="app" class="w-full max-w-[400px] px-4 py-8"></div>
 
-    <!-- 加载 React -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <script type="text/babel">
-        const { useState, useRef } = React;
+        const { useState, useRef, useEffect } = React;
 
-        // 基础配置
-        const apiKey = ""; // 运行时环境会自动注入
+        const apiKey = ""; 
         const MODEL_ID = "gemini-2.5-flash-preview-09-2025";
 
         function App() {
-            const [step, setStep] = useState('home'); // home, loading, result
+            const [step, setStep] = useState('home'); 
             const [data, setData] = useState(null);
             const [error, setError] = useState(null);
+            const [renderedImg, setRenderedImg] = useState(null);
             const fileInputRef = useRef(null);
+            const resultRef = useRef(null);
 
-            // 图像处理
+            useEffect(() => {
+                if (step === 'result' && data) {
+                    // 增加延迟确保 DOM 渲染完成且库已加载
+                    const timer = setTimeout(() => {
+                        generateImage();
+                    }, 800);
+                    return () => clearTimeout(timer);
+                }
+            }, [step, data]);
+
+            const generateImage = async () => {
+                if (!resultRef.current) return;
+                
+                // 检查 html2canvas 是否已在全局作用域定义
+                if (typeof html2canvas === 'undefined') {
+                    console.warn("html2canvas 尚未加载，正在重试...");
+                    setTimeout(generateImage, 500);
+                    return;
+                }
+
+                try {
+                    const canvas = await html2canvas(resultRef.current, {
+                        useCORS: true,
+                        scale: 2, 
+                        backgroundColor: "#ffffff",
+                        borderRadius: 40,
+                        logging: false
+                    });
+                    setRenderedImg(canvas.toDataURL('image/png'));
+                } catch (err) {
+                    console.error("生成图片失败:", err);
+                }
+            };
+
             const processImage = (file) => {
                 return new Promise((resolve) => {
                     const reader = new FileReader();
@@ -84,6 +123,7 @@
             const analyzePalm = async (base64) => {
                 setStep('loading');
                 setError(null);
+                setRenderedImg(null);
                 
                 const prompt = `你是一位精通易经与生物识别的大师。请分析这张手掌照片的纹路。
                 必须返回严格的 JSON 格式（不要包含任何 Markdown 标记）：
@@ -126,87 +166,108 @@
             };
 
             return (
-                <div className="bg-white rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] overflow-hidden flex flex-col min-h-[700px] relative">
-                    
-                    {/* Header */}
-                    <header className="px-8 pt-12 pb-6 text-left">
-                        <p className="text-[10px] font-black tracking-[0.3em] text-gray-300 uppercase mb-1">Aesthetic Lab</p>
-                        <h1 className="text-2xl font-black tracking-tight text-black">卦象实验室</h1>
-                    </header>
+                <div className="relative">
+                    <div 
+                        ref={resultRef}
+                        id="capture-area"
+                        className="bg-white rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] overflow-hidden flex flex-col min-h-[700px] relative"
+                    >
+                        <header className="px-8 pt-12 pb-6 text-left">
+                            <p className="text-[10px] font-black tracking-[0.3em] text-gray-300 uppercase mb-1">Aesthetic Lab</p>
+                            <h1 className="text-2xl font-black tracking-tight text-black">卦象实验室</h1>
+                        </header>
 
-                    <main className="flex-1 px-8 flex flex-col">
-                        {step === 'home' && (
-                            <div className="flex-1 flex flex-col items-center justify-center">
-                                <div 
-                                    onClick={() => fileInputRef.current.click()}
-                                    className="w-full aspect-square border-2 border-dashed border-gray-100 rounded-[3rem] flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-all active:scale-95"
+                        <main className="flex-1 px-8 flex flex-col">
+                            {step === 'home' && (
+                                <div className="flex-1 flex flex-col items-center justify-center">
+                                    <div 
+                                        onClick={() => fileInputRef.current.click()}
+                                        className="w-full aspect-square border-2 border-dashed border-gray-100 rounded-[3rem] flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-all active:scale-95"
+                                    >
+                                        <span className="text-4xl text-gray-200 mb-2">＋</span>
+                                        <p className="text-[10px] font-bold tracking-widest text-gray-300 uppercase">上传手掌照片</p>
+                                    </div>
+                                    <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} accept="image/*" />
+                                    {error && <p className="mt-4 text-xs text-red-400 font-medium">{error}</p>}
+                                    <p className="mt-6 text-[10px] text-gray-300 font-medium italic">基于易经卦象与生物识别技术</p>
+                                </div>
+                            )}
+
+                            {step === 'loading' && (
+                                <div className="flex-1 flex flex-col items-center justify-center">
+                                    <div className="w-full aspect-square bg-gray-50 rounded-[3rem] relative overflow-hidden">
+                                        <div className="scan-line"></div>
+                                        <div className="absolute inset-0 flex items-center justify-center text-center px-6">
+                                            <p className="text-[10px] font-black tracking-[0.2em] text-gray-400 animate-pulse uppercase">
+                                                正在解析掌心脉络<br/>提取生物特征中...
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {step === 'result' && data && (
+                                <div className="flex-1 flex flex-col space-y-8 animate-in fade-in duration-700 pb-4">
+                                    <section className="text-left">
+                                        <p className="text-[10px] font-bold text-gray-300 tracking-widest uppercase mb-2">Analysis Result</p>
+                                        <h2 className="text-6xl font-black tracking-tighter">{data.hexagram}</h2>
+                                        <div className="w-10 h-1.5 bg-black mt-4"></div>
+                                    </section>
+
+                                    <section className="text-left">
+                                        <p className="text-sm leading-relaxed text-gray-600 font-medium">
+                                            {data.insight}
+                                        </p>
+                                    </section>
+
+                                    <section className="bg-gray-50 rounded-[2rem] p-6 space-y-6">
+                                        <div className="flex justify-between items-center">
+                                            <div className="w-12 h-12 rounded-full shadow-inner" style={{backgroundColor: data.color}}></div>
+                                            <span className="text-[10px] font-mono text-gray-400 uppercase font-bold">{data.color}</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4 border-t border-gray-100 pt-4">
+                                            <div className="text-left">
+                                                <p className="text-[9px] font-bold text-gray-300 uppercase">气质建议</p>
+                                                <p className="text-xs font-black mt-1">{data.vibe}</p>
+                                            </div>
+                                            <div className="text-left">
+                                                <p className="text-[9px] font-bold text-gray-300 uppercase">穿戴指南</p>
+                                                <p className="text-xs font-black mt-1">{data.outfit}</p>
+                                            </div>
+                                        </div>
+                                    </section>
+                                    
+                                    <div className="pt-4 text-center">
+                                        <p className="text-[9px] font-bold text-gray-200 tracking-[0.2em] uppercase">
+                                            - 长按下方区域保存分析报告 -
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+                        </main>
+
+                        <footer className="p-8">
+                            {step === 'result' ? (
+                                <button 
+                                    onClick={() => setStep('home')}
+                                    className="w-full py-5 bg-black text-white rounded-2xl text-[11px] font-black tracking-[0.2em] uppercase active:scale-95 transition-transform"
                                 >
-                                    <span className="text-4xl text-gray-200 mb-2">＋</span>
-                                    <p className="text-[10px] font-bold tracking-widest text-gray-300 uppercase">上传手掌照片</p>
-                                </div>
-                                <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} accept="image/*" />
-                                {error && <p className="mt-4 text-xs text-red-400 font-medium">{error}</p>}
-                            </div>
-                        )}
+                                    重新解析
+                                </button>
+                            ) : (
+                                <div className="h-[58px]"></div> 
+                            )}
+                        </footer>
+                    </div>
 
-                        {step === 'loading' && (
-                            <div className="flex-1 flex flex-col items-center justify-center">
-                                <div className="w-full aspect-square bg-gray-50 rounded-[3rem] relative overflow-hidden">
-                                    <div className="scan-line"></div>
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                        <p className="text-[10px] font-black tracking-[0.2em] text-gray-400 animate-pulse uppercase">正在解析生物特征...</p>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {step === 'result' && data && (
-                            <div className="flex-1 flex flex-col space-y-8 animate-in slide-in-from-bottom-4 duration-700 pb-4">
-                                <section className="text-left">
-                                    <p className="text-[10px] font-bold text-gray-300 tracking-widest uppercase mb-2">Analysis Result</p>
-                                    <h2 className="text-6xl font-black tracking-tighter">{data.hexagram}</h2>
-                                    <div className="w-10 h-1.5 bg-black mt-4"></div>
-                                </section>
-
-                                <section className="text-left">
-                                    <p className="text-sm leading-relaxed text-gray-600 font-medium">
-                                        {data.insight}
-                                    </p>
-                                </section>
-
-                                <section className="bg-gray-50 rounded-[2rem] p-6 space-y-6">
-                                    <div className="flex justify-between items-center">
-                                        <div className="w-12 h-12 rounded-full shadow-inner" style={{backgroundColor: data.color}}></div>
-                                        <span className="text-[10px] font-mono text-gray-400 uppercase font-bold">{data.color}</span>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4 border-t border-gray-100 pt-4">
-                                        <div className="text-left">
-                                            <p className="text-[9px] font-bold text-gray-300 uppercase">气质建议</p>
-                                            <p className="text-xs font-black mt-1">{data.vibe}</p>
-                                        </div>
-                                        <div className="text-left">
-                                            <p className="text-[9px] font-bold text-gray-300 uppercase">穿戴指南</p>
-                                            <p className="text-xs font-black mt-1">{data.outfit}</p>
-                                        </div>
-                                    </div>
-                                </section>
-                            </div>
-                        )}
-                    </main>
-
-                    {/* Footer Button */}
-                    <footer className="p-8">
-                        {step === 'result' ? (
-                            <button 
-                                onClick={() => setStep('home')}
-                                className="w-full py-5 bg-black text-white rounded-2xl text-[11px] font-black tracking-[0.2em] uppercase active:scale-95 transition-transform shadow-lg shadow-black/10"
-                            >
-                                重新解析
-                            </button>
-                        ) : (
-                            <div className="h-[58px]"></div> 
-                        )}
-                    </footer>
+                    {step === 'result' && renderedImg && (
+                        <img 
+                            src={renderedImg} 
+                            className="absolute inset-0 w-full h-full opacity-0 z-50 cursor-pointer"
+                            style={{ WebkitTouchCallout: 'default' }}
+                            alt="长按保存图片"
+                        />
+                    )}
                 </div>
             );
         }
