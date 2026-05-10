@@ -12,7 +12,6 @@
         :root {
             --bg-base: #F7F7F5;
             --text-main: #111111;
-            --accent: #E05A3D;
             --surface: #FFFFFF;
         }
 
@@ -21,6 +20,8 @@
             color: var(--text-main);
             font-family: 'Inter', -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif;
             -webkit-font-smoothing: antialiased;
+            margin: 0;
+            padding: 0;
             overscroll-behavior-y: none;
         }
 
@@ -30,74 +31,45 @@
         .btn-press { transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
         .btn-press:active { transform: scale(0.96); opacity: 0.9; }
 
-        /* 修复：确保光环严格受限于圆角矩形/圆形 */
-        .upload-group {
-            position: relative;
-            border-radius: 9999px; /* 强制圆形容器 */
-            overflow: visible;
-        }
-
-        .halo-ring {
-            position: absolute;
-            inset: -4px;
-            border-radius: 50%;
-            background: conic-gradient(from 0deg, transparent, rgba(0,0,0,0.1), transparent, rgba(0,0,0,0.05), transparent);
-            animation: rotateHalo 4s linear infinite;
-            z-index: 0;
-            opacity: 0;
-            transition: opacity 0.6s ease;
-            pointer-events: none;
-        }
-        .upload-group:hover .halo-ring { opacity: 1; }
-
-        @keyframes rotateHalo {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
+        /* 扫描动画 */
         .scan-beam {
             position: absolute;
-            left: 0;
-            width: 100%;
-            height: 4px;
-            background: linear-gradient(90deg, transparent, rgba(224, 90, 61, 0.8), transparent);
-            box-shadow: 0 0 20px rgba(224, 90, 61, 0.4);
-            animation: scan 2.5s ease-in-out infinite;
+            left: 0; width: 100%; height: 2px;
+            background: linear-gradient(90deg, transparent, #000, transparent);
+            animation: scan 2s ease-in-out infinite;
             z-index: 10;
         }
-
         @keyframes scan {
             0% { top: 0%; opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 1; }
+            50% { opacity: 1; }
             100% { top: 100%; opacity: 0; }
         }
 
         .animate-enter { animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         @keyframes fadeUp {
-            from { opacity: 0; transform: translateY(15px); }
+            from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
     </style>
 </head>
-<body class="flex flex-col items-center justify-center min-h-screen sm:p-4">
+<body class="flex flex-col items-center justify-center min-h-[100dvh] bg-[#F7F7F5] overflow-hidden">
 
-    <div id="app-container" class="w-full max-w-[400px] h-[100dvh] sm:h-[85vh] bg-[var(--surface)] sm:rounded-[2.5rem] shadow-2xl overflow-hidden relative flex flex-col border border-black/5">
+    <div id="app-container" class="w-full max-w-[420px] h-[100dvh] sm:h-[90vh] bg-white sm:rounded-[2rem] shadow-2xl overflow-hidden relative flex flex-col border border-black/5">
         
-        <header class="px-8 pt-12 pb-6 flex justify-between items-start z-20 bg-white/80 backdrop-blur-md absolute top-0 w-full">
+        <!-- Header -->
+        <header class="px-8 pt-8 pb-4 flex justify-between items-start z-30 bg-white/80 backdrop-blur-md sticky top-0 border-b border-black/5">
             <div>
-                <h1 class="text-[12px] font-black tracking-[0.2em] uppercase text-black">Hexagram Lab</h1>
-                <p class="text-[9px] font-medium text-black/40 tracking-widest mt-1">Biometric Destiny Analysis</p>
+                <h1 class="text-[11px] font-black tracking-[0.25em] uppercase">Hexagram Lab</h1>
+                <p class="text-[9px] font-medium text-black/30 tracking-widest mt-0.5">Context-Aware AI</p>
             </div>
-            <div class="flex items-center gap-1.5 px-2 py-1 rounded bg-black/5 border border-black/5">
-                <div class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
-                <span class="text-[8px] font-bold tracking-widest text-black/60">SYS_ON</span>
+            <div class="px-2 py-0.5 rounded-full border border-black/10 flex items-center gap-1.5">
+                <div class="w-1 h-1 bg-green-500 rounded-full animate-pulse"></div>
+                <span class="text-[8px] font-bold tracking-tighter text-black/50 uppercase">Sys_On</span>
             </div>
         </header>
 
-        <main class="flex-1 overflow-y-auto no-scrollbar pt-32 pb-24 relative z-10">
-            <div id="react-root" class="h-full"></div>
-        </main>
+        <!-- Dynamic Content -->
+        <main id="react-root" class="flex-1 flex flex-col overflow-hidden relative"></main>
     </div>
 
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -116,6 +88,66 @@
             Download: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
         };
 
+        // --- 数字雨/卦象雨 Canvas 组件 ---
+        const MatrixRain = () => {
+            const canvasRef = useRef(null);
+
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                
+                // 设置画布尺寸
+                const resize = () => {
+                    canvas.width = canvas.parentElement.clientWidth;
+                    canvas.height = canvas.parentElement.clientHeight;
+                };
+                resize();
+                window.addEventListener('resize', resize);
+
+                // 字符集：二进制 + 八卦
+                const chars = '01乾坤震巽坎离艮兑☰☱☲☳☴☵☶☷'.split('');
+                const fontSize = 14;
+                const columns = canvas.width / fontSize;
+                const drops = Array(Math.floor(columns)).fill(1);
+
+                let animationFrameId;
+
+                const draw = () => {
+                    // 半透明遮罩产生拖影效果
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                    // 字体颜色（极简高级灰）
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+                    ctx.font = fontSize + 'px monospace';
+
+                    for (let i = 0; i < drops.length; i++) {
+                        const text = chars[Math.floor(Math.random() * chars.length)];
+                        ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+
+                        // 随机重置
+                        if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                            drops[i] = 0;
+                        }
+                        drops[i]++;
+                    }
+                    // 控制帧率，无需太快
+                    setTimeout(() => {
+                        animationFrameId = requestAnimationFrame(draw);
+                    }, 50);
+                };
+
+                draw();
+
+                return () => {
+                    window.removeEventListener('resize', resize);
+                    cancelAnimationFrame(animationFrameId);
+                };
+            }, []);
+
+            return <canvas ref={canvasRef} className="absolute inset-0 z-0 pointer-events-none" />;
+        };
+
         const App = () => {
             const [stage, setStage] = useState('ENTRY');
             const [image, setImage] = useState(null);
@@ -131,12 +163,13 @@
                         img.src = e.target.result;
                         img.onload = () => {
                             const cvs = document.createElement('canvas');
-                            const maxW = 800; 
+                            const max = 1000;
                             let w = img.width, h = img.height;
-                            if (w > maxW) { h *= maxW / w; w = maxW; }
+                            if (w > h && w > max) { h *= max/w; w = max; }
+                            else if (h > max) { w *= max/h; h = max; }
                             cvs.width = w; cvs.height = h;
                             cvs.getContext('2d').drawImage(img, 0, 0, w, h);
-                            resolve(cvs.toDataURL('image/jpeg', 0.8).split(',')[1]);
+                            resolve(cvs.toDataURL('image/jpeg', 0.85).split(',')[1]);
                         };
                     };
                     reader.readAsDataURL(file);
@@ -145,12 +178,31 @@
 
             const runAnalysis = async (base64) => {
                 setStage('SCANNING');
-                const msgs = ["同步生物特征...", "读取情绪频率...", "解析高维拓扑...", "正在生成视觉档案..."];
-                let mId = 0;
-                const timer = setInterval(() => { setLoadingText(msgs[mId++ % msgs.length]); }, 800);
+                const msgs = ["视网膜数据接收中...", "识别空间与手势语境...", "量子易经引擎启动...", "匹配高维情绪处方..."];
+                let idx = 0;
+                const timer = setInterval(() => setLoadingText(msgs[idx++ % msgs.length]), 1200);
 
-                const prompt = `分析这张手相图片，提供具有极简主义美学色彩的解读。以 JSON 格式输出，不要包含 Markdown 块。
-                包含字段：hexagram (卦象名), destiny_word (四字状态), core_insight (深度解读, 80字内), aesthetic (包含 color_name, color_hex, texture, action), quote (极简金句)。`;
+                // --- 核心：赋予AI活人感、幽默感与多模态识别能力的 Prompt ---
+                const prompt = `你是一个拥有顶级审美、深谙《易经》并且极具幽默感的AI视觉大师。
+                请先仔细观察这张图片，并根据不同的情况给出不同的反馈策略：
+                
+                1. 如果图片是【正经平摊的手掌】：请给出极其专业、深度的掌纹易经解析，匹配六十四卦，指出具体纹理（如生命线、智慧线）的特征，文风冷峻、专业。
+                2. 如果图片是【特殊手势】（如：比心、剪刀手、点赞等）：请开启“调皮模式”。直接点破用户的手势，并赋予一个幽默的自定义卦名（如“比心卦”、“剪刀手卦”），用轻松、风趣、带点吐槽的口吻来解读他们此刻的心境。
+                3. 如果图片【根本不是手】（如猫狗、风景、物品）：请毫不留情地揭穿，但依然基于图片的意象，强行用《易经》的哲理给出一份生活建议。
+
+                无论哪种情况，必须输出合法的 JSON 格式，且严禁包含 markdown 代码块标记：
+                {
+                    "hexagram": "对应的卦名 (正经卦名 或 幽默自定义卦名)",
+                    "destiny_word": "四个字的极简状态词 (如: 敛华内映 或 多巴胺溢)",
+                    "core_insight": "深刻或幽默的解读（必须体现出你真实看到了图片里的什么细节，100字左右）",
+                    "quote": "一句有意思的金句",
+                    "aesthetic": { 
+                        "color_name": "推荐审美色名", 
+                        "color_hex": "#HEX色值", 
+                        "texture": "穿搭或材质建议", 
+                        "action": "今日建议动作" 
+                    }
+                }`;
 
                 try {
                     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL_ID}:generateContent?key=${API_KEY}`, {
@@ -161,17 +213,28 @@
                             generationConfig: { responseMimeType: "application/json" }
                         })
                     });
-                    const resJson = await response.json();
-                    let rawText = resJson.candidates[0].content.parts[0].text;
-                    rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-                    setData(JSON.parse(rawText));
-                } catch (err) {
+                    const res = await response.json();
+                    
+                    if (!response.ok) throw new Error(res.error?.message || "API 异常");
+
+                    // 极致强壮的 JSON 提取逻辑
+                    let text = res.candidates[0].content.parts[0].text;
+                    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                    const startIdx = text.indexOf('{');
+                    const endIdx = text.lastIndexOf('}');
+                    if (startIdx !== -1 && endIdx !== -1) {
+                        text = text.substring(startIdx, endIdx + 1);
+                    }
+                    setData(JSON.parse(text));
+                } catch (e) {
+                    console.error("解析失败:", e);
+                    // 幽默的错误兜底
                     setData({
-                        hexagram: "风地观",
-                        destiny_word: "敛华内映",
-                        core_insight: "纹理如古瓷开片，预示你正经历从破碎到重构的升华。生活剥离了冗余，留下淬炼后的本质。请保持容器般的包容，在静默中观察流动的机遇。",
-                        aesthetic: { color_name: "素瓷月白", color_hex: "#F2F0E6", texture: "质感挺阔的哑光棉麻", action: "在晨间观察一束光的位移" },
-                        quote: "空即是用，裂纹亦是光照进来的地方。"
+                        hexagram: "宕机卦",
+                        destiny_word: "量子波动",
+                        core_insight: "实验室的灵波天线可能被哪只过路的宇宙猫碰歪了。解析出现了一丝时空乱流，但这意味着你此刻的能量超出了算法的边界。保持这种不可预测的神秘感吧。",
+                        quote: "连AI都无法定义的你，才是最酷的。",
+                        aesthetic: { color_name: "错误代码红", color_hex: "#EF4444", texture: "宽松卫衣", action: "喝杯水，等会儿再试" }
                     });
                 } finally {
                     clearInterval(timer);
@@ -187,47 +250,50 @@
                 runAnalysis(b64);
             };
 
-            const generatePoster = async () => {
-                const modal = document.getElementById('poster-modal');
-                const target = document.getElementById('poster-render-target');
-                const wrap = document.getElementById('poster-wrap');
-                wrap.innerHTML = '<div class="text-white text-[10px] tracking-widest opacity-40 animate-pulse">Encoding Digital Archive...</div>';
+            const saveArchive = async () => {
+                const modal = document.getElementById('save-modal');
+                const wrap = document.getElementById('poster-output');
                 modal.classList.remove('hidden');
+                wrap.innerHTML = '<div class="text-white/40 animate-pulse text-[10px] tracking-widest uppercase py-20 text-center">Rendering High-Res...</div>';
 
                 try {
-                    const canvas = await html2canvas(target, { scale: 3, useCORS: true, logging: false });
+                    const canvas = await html2canvas(document.getElementById('poster-render-target'), {
+                        scale: 3,
+                        useCORS: true,
+                        backgroundColor: '#FFFFFF'
+                    });
                     const img = new Image();
                     img.src = canvas.toDataURL('image/jpeg', 0.95);
-                    img.className = "w-full h-auto shadow-2xl rounded-xl border border-white/10";
+                    img.className = "w-full h-auto shadow-2xl border border-white/10 max-h-[80vh] object-contain";
                     wrap.innerHTML = '';
                     wrap.appendChild(img);
-                } catch (e) {
-                    wrap.innerHTML = '<div class="text-white">Rendering Failed.</div>';
+                } catch (err) {
+                    wrap.innerHTML = '<p class="text-red-400 p-10 text-center">生成失败，请尝试手动截图保存。</p>';
                 }
             };
 
             return (
-                <div className="w-full h-full px-8 relative">
+                <div className="flex-1 flex flex-col h-full overflow-hidden relative z-10">
+                    {/* 数字雨背景，仅在 Entry 阶段显示 */}
+                    {stage === 'ENTRY' && <MatrixRain />}
+
                     {stage === 'ENTRY' && (
-                        <div className="flex-1 flex flex-col justify-center animate-enter h-full">
-                            <div className="space-y-4 mb-16">
-                                <h2 className="text-4xl font-black tracking-tight leading-[1.1] text-black">建立<br/>生体链接</h2>
-                                <p className="text-xs text-black/50 font-medium leading-relaxed max-w-[220px]">
-                                    上传清晰的掌面图像。<br/>系统将提纯您的生物密码，映射今日的高维能量场。
+                        <div className="flex-1 flex flex-col px-10 pt-16 animate-enter relative z-10">
+                            <div className="mb-16">
+                                <h2 className="text-[2.8rem] font-black leading-[1.1] tracking-tight mb-4">建立<br/>全息链接</h2>
+                                <p className="text-[12px] text-black/60 font-medium leading-relaxed max-w-[220px]">
+                                    上传手相、手势甚至任何物品。<br/>系统将根据情境动态生成专属解读。
                                 </p>
                             </div>
-                            <div className="w-full aspect-square flex items-center justify-center">
-                                <div className="upload-group w-64 h-64 flex items-center justify-center">
-                                    <div className="halo-ring"></div>
-                                    <div 
-                                        onClick={() => fileRef.current.click()}
-                                        className="relative w-full h-full bg-[#F9F9F8] border border-black/5 rounded-full flex flex-col items-center justify-center cursor-pointer btn-press z-10"
-                                    >
-                                        <div className="w-12 h-12 bg-white rounded-full shadow-sm flex items-center justify-center text-black/20 mb-3">
-                                            <Icons.Plus />
-                                        </div>
-                                        <span className="text-[10px] font-bold tracking-[0.2em] text-black/40 uppercase">Initiate</span>
+                            <div className="flex-1 flex items-center justify-center pb-20">
+                                <div 
+                                    onClick={() => fileRef.current.click()}
+                                    className="w-56 h-56 rounded-full border border-black/10 bg-white/80 backdrop-blur flex flex-col items-center justify-center cursor-pointer btn-press group shadow-[0_0_40px_rgba(0,0,0,0.05)]"
+                                >
+                                    <div className="w-12 h-12 rounded-full bg-black shadow-sm flex items-center justify-center mb-4 text-white group-hover:scale-110 transition-transform">
+                                        <Icons.Plus />
                                     </div>
+                                    <span className="text-[10px] font-bold tracking-[0.3em] uppercase text-black/40 group-hover:text-black transition-colors">Initiate</span>
                                 </div>
                             </div>
                             <input type="file" ref={fileRef} className="hidden" accept="image/*" onChange={handleFile} />
@@ -235,52 +301,60 @@
                     )}
 
                     {stage === 'SCANNING' && (
-                        <div className="flex-1 flex flex-col items-center justify-center animate-enter h-full space-y-12">
-                            <div className="relative w-64 h-64 rounded-full overflow-hidden shadow-2xl">
-                                <img src={image} className="w-full h-full object-cover" />
+                        <div className="flex-1 flex flex-col items-center justify-center space-y-12 animate-enter bg-white/50 backdrop-blur-sm z-10">
+                            <div className="w-64 h-64 rounded-full overflow-hidden relative shadow-2xl border-4 border-white">
+                                <img src={image} className="w-full h-full object-cover grayscale opacity-60" />
                                 <div className="scan-beam"></div>
                             </div>
-                            <div className="text-center space-y-3">
-                                <p className="text-[12px] font-bold tracking-[0.3em] uppercase text-black/80 animate-pulse">{loadingText}</p>
-                            </div>
+                            <p className="text-[11px] font-bold tracking-[0.4em] uppercase text-black/80 animate-pulse">{loadingText}</p>
                         </div>
                     )}
 
                     {stage === 'RESULT' && data && (
-                        <div className="flex-1 flex flex-col animate-enter pb-10">
-                            <div className="space-y-10">
-                                <div className="space-y-2 pt-2">
-                                    <div className="inline-block px-3 py-1 bg-black/5 rounded text-[9px] font-bold tracking-[0.2em] text-black/60 uppercase">
-                                        状态: {data.destiny_word}
-                                    </div>
-                                    <h2 className="text-[3.5rem] font-black tracking-tighter leading-none text-black mt-2">{data.hexagram}</h2>
-                                </div>
-                                <div className="space-y-4">
-                                    <h3 className="text-[10px] font-bold tracking-[0.3em] text-black/30 uppercase flex items-center gap-2">
-                                        <div className="w-1 h-1 bg-black rounded-full"></div> 能量透视
-                                    </h3>
-                                    <p className="text-[14px] leading-[1.8] font-medium text-black/80">{data.core_insight}</p>
-                                </div>
-                                <div className="bg-[#F9F9F8] rounded-2xl p-6 border border-black/[0.03] space-y-6">
-                                    <div className="flex items-center justify-between border-b border-black/5 pb-4">
-                                        <h3 className="text-[10px] font-bold tracking-[0.2em] text-black/40 uppercase">Aesthetic</h3>
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-4 h-4 rounded-full border border-black/10" style={{ backgroundColor: data.aesthetic.color_hex }}></div>
-                                            <span className="text-[10px] font-bold uppercase">{data.aesthetic.color_name}</span>
+                        <div className="flex-1 flex flex-col overflow-hidden animate-enter bg-white z-10">
+                            <div className="flex-1 overflow-y-auto no-scrollbar px-8 pt-4 pb-32">
+                                <div className="space-y-10">
+                                    <div className="space-y-3">
+                                        <div className="inline-flex px-2 py-0.5 bg-black text-white text-[9px] font-bold tracking-widest uppercase">
+                                            状态: {data.destiny_word}
                                         </div>
+                                        <h2 className="text-[2.5rem] leading-none font-black tracking-tighter break-words">{data.hexagram}</h2>
                                     </div>
-                                    <div className="space-y-4 text-[12px] font-medium">
-                                        <p><span className="text-black/30 mr-2 uppercase text-[9px] font-bold">搭配</span>{data.aesthetic.texture}</p>
-                                        <p><span className="text-black/30 mr-2 uppercase text-[9px] font-bold">建议</span>{data.aesthetic.action}</p>
+
+                                    <div className="space-y-6">
+                                        <p className="text-lg font-bold leading-snug italic">“ {data.quote} ”</p>
+                                        <p className="text-[14px] leading-[1.8] text-black/80 font-medium text-justify">{data.core_insight}</p>
+                                    </div>
+
+                                    <div className="border-t border-black/5 pt-8 space-y-6">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-[10px] font-bold tracking-widest text-black/30 uppercase">Aesthetic Guide</span>
+                                            <div className="flex items-center gap-2 bg-slate-50 px-2 py-1 rounded-sm border border-black/5">
+                                                <div className="w-3 h-3 rounded-sm border border-black/10" style={{backgroundColor: data.aesthetic.color_hex}}></div>
+                                                <span className="text-[9px] font-bold uppercase">{data.aesthetic.color_name}</span>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-1">
+                                                <p className="text-[8px] font-bold text-black/30 uppercase tracking-tighter">Texture</p>
+                                                <p className="text-[12px] font-bold leading-relaxed">{data.aesthetic.texture}</p>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-[8px] font-bold text-black/30 uppercase tracking-tighter">Action</p>
+                                                <p className="text-[12px] font-bold leading-relaxed">{data.aesthetic.action}</p>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                            <div className="fixed bottom-6 left-0 w-full px-8 z-30">
-                                <div className="flex gap-3 bg-white/90 backdrop-blur-xl p-2 rounded-[1.5rem] shadow-[0_10px_40px_rgba(0,0,0,0.08)] border border-black/5">
-                                    <button onClick={() => { setStage('ENTRY'); setData(null); setImage(null); }} className="w-14 h-14 rounded-full bg-black/5 flex items-center justify-center text-black/60 btn-press">
+
+                            {/* Controls */}
+                            <div className="absolute bottom-0 left-0 w-full p-8 pt-10 bg-gradient-to-t from-white via-white to-transparent z-40">
+                                <div className="flex gap-3">
+                                    <button onClick={() => { setStage('ENTRY'); setData(null); setImage(null); }} className="w-14 h-14 rounded-xl border border-black/10 bg-white flex items-center justify-center text-black/60 btn-press">
                                         <Icons.Refresh />
                                     </button>
-                                    <button onClick={generatePoster} className="flex-1 h-14 bg-black text-white rounded-[1.2rem] flex items-center justify-center gap-2 text-[11px] font-bold tracking-[0.2em] uppercase shadow-lg btn-press">
+                                    <button onClick={saveArchive} className="flex-1 bg-black text-white rounded-xl flex items-center justify-center gap-3 text-[11px] font-bold tracking-[0.2em] uppercase shadow-xl btn-press">
                                         <Icons.Download /> 封存档案
                                     </button>
                                 </div>
@@ -288,42 +362,52 @@
                         </div>
                     )}
 
-                    {/* 海报渲染模板 - 隐藏但真实存在 */}
+                    {/* Poster Render Target (Hidden) */}
                     {data && (
-                        <div id="poster-render-target" className="absolute top-[-9999px] left-[-9999px] w-[375px] bg-[#FAF9F6] p-8 flex flex-col text-black border-[12px] border-white box-border">
-                            <header className="flex justify-between items-end border-b-2 border-black pb-5 mb-8">
+                        <div id="poster-render-target" className="absolute top-[-9999px] left-[-9999px] w-[375px] flex flex-col p-8 pb-12 bg-white box-border text-black">
+                            <header className="flex justify-between items-start mb-8">
                                 <div>
-                                    <p className="text-[8px] font-bold tracking-[0.4em] uppercase text-black/40 mb-1">Bio-Logic Protocol</p>
-                                    <h1 className="text-4xl font-black tracking-tighter leading-none">{data.hexagram}</h1>
+                                    <p className="text-[8px] font-black tracking-[0.4em] uppercase text-black/30 mb-1">Aesthetic Analytics</p>
+                                    <h1 className="text-3xl font-black tracking-tight leading-none break-words max-w-[200px]">{data.hexagram}</h1>
                                 </div>
-                                <div className="text-[10px] font-bold bg-black text-white px-2 py-1 uppercase">{data.destiny_word}</div>
+                                <div className="px-2 py-0.5 bg-black text-white text-[9px] font-bold uppercase tracking-widest">{data.destiny_word}</div>
                             </header>
 
-                            {/* 修复：使用 aspect-square 和 object-cover 保证图片比例不被压扁 */}
-                            <div className="w-full aspect-square rounded-lg overflow-hidden border border-black/5 mb-8 relative">
-                                <img src={image} className="w-full h-full object-cover mix-blend-multiply opacity-90" />
-                                <div className="absolute inset-0 bg-[#E05A3D]/5 mix-blend-overlay"></div>
-                                <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur px-2 py-1.5 flex items-center gap-2 rounded-sm shadow-sm">
+                            <div className="w-full aspect-square bg-black mb-8 overflow-hidden relative rounded-md">
+                                <img src={image} className="w-full h-full object-cover mix-blend-screen opacity-90 grayscale" />
+                                <div className="absolute inset-0 border-8 border-white/10 mix-blend-overlay"></div>
+                                {/* 悬浮的颜色指引 */}
+                                <div className="absolute bottom-4 left-4 flex items-center gap-2 px-3 py-1.5 bg-white/95 backdrop-blur rounded shadow-sm border border-black/5">
                                     <div className="w-3 h-3 rounded-sm border border-black/10" style={{backgroundColor: data.aesthetic.color_hex}}></div>
-                                    <span className="text-[8px] font-bold uppercase tracking-widest">{data.aesthetic.color_name}</span>
+                                    <span className="text-[9px] font-black uppercase tracking-wider">{data.aesthetic.color_name}</span>
                                 </div>
                             </div>
 
                             <div className="flex-1 space-y-6">
-                                <p className="text-[18px] font-black leading-[1.4] text-black">“ {data.quote} ”</p>
-                                <p className="text-[12px] font-medium leading-[1.8] text-black/70 text-justify">{data.core_insight}</p>
+                                <p className="text-xl font-bold leading-snug italic">“ {data.quote} ”</p>
+                                <p className="text-[12px] leading-[1.8] text-black/80 font-medium text-justify">{data.core_insight}</p>
                             </div>
 
-                            <footer className="mt-12 pt-5 border-t border-black/10 flex justify-between items-end">
-                                <div className="text-[8px] font-mono font-bold tracking-widest text-black/30 uppercase leading-loose">
-                                    Hexagram Lab<br/>Aesthetic Data Output
+                            <footer className="mt-12 pt-4 border-t border-black/10 flex justify-between items-end">
+                                <div className="text-[7px] font-bold tracking-[0.3em] text-black/20 uppercase leading-relaxed">
+                                    Hexagram Lab V5.0<br/>Context-Aware Output
                                 </div>
                                 <div className="w-10 h-10 border border-black p-0.5 flex items-center justify-center">
-                                    <div className="w-full h-full bg-black text-white flex items-center justify-center text-[6px] font-bold tracking-widest">SCAN</div>
+                                    <div className="w-full h-full bg-black text-white flex items-center justify-center text-[6px] font-black tracking-widest">SCAN</div>
                                 </div>
                             </footer>
                         </div>
                     )}
+
+                    {/* Save Modal */}
+                    <div id="save-modal" className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] hidden flex flex-col items-center justify-center p-6 animate-enter" onClick={(e) => e.target.id === 'save-modal' && e.currentTarget.classList.add('hidden')}>
+                        <div id="poster-output" className="w-full flex justify-center items-center"></div>
+                        <div className="mt-8 text-center space-y-3">
+                            <p className="text-[11px] font-bold text-white tracking-[0.4em] uppercase animate-pulse">Archive Encoded</p>
+                            <p className="text-[9px] text-white/40 tracking-widest uppercase">长按图片即可保存至手机相册</p>
+                            <button onClick={() => document.getElementById('save-modal').classList.add('hidden')} className="mt-4 px-6 py-2 border border-white/20 rounded-full text-[9px] text-white/50 hover:text-white uppercase tracking-widest transition-colors">关闭</button>
+                        </div>
+                    </div>
                 </div>
             );
         };
@@ -331,16 +415,5 @@
         const root = ReactDOM.createRoot(document.getElementById('react-root'));
         root.render(<App />);
     </script>
-    
-    <div id="poster-modal" class="fixed inset-0 bg-black/95 backdrop-blur-lg z-[100] hidden flex flex-col items-center justify-center p-6" onclick="if(event.target.id === 'poster-modal') this.classList.add('hidden')">
-        <div id="poster-wrap" class="w-full max-w-[340px] transition-all duration-500 transform scale-100"></div>
-        <div class="mt-8 text-center space-y-6">
-            <div class="space-y-1">
-                <p class="text-[10px] font-bold tracking-[0.4em] text-white/80 uppercase">Archive Generated</p>
-                <p class="text-[9px] text-white/30 tracking-[0.2em] uppercase">Long press to save high-res image</p>
-            </div>
-            <button onclick="document.getElementById('poster-modal').classList.add('hidden')" class="px-6 py-2 border border-white/10 rounded-full text-[9px] text-white/40 tracking-widest uppercase hover:text-white transition-colors">Close</button>
-        </div>
-    </div>
 </body>
 </html>
